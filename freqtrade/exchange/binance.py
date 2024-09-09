@@ -49,11 +49,13 @@ class Binance(Exchange):
     _supported_trading_mode_margin_pairs: List[Tuple[TradingMode, MarginMode]] = [
         # TradingMode.SPOT always supported and not required in this list
         # (TradingMode.MARGIN, MarginMode.CROSS),
-        # (TradingMode.FUTURES, MarginMode.CROSS),
-        (TradingMode.FUTURES, MarginMode.ISOLATED)
+        (TradingMode.FUTURES, MarginMode.CROSS),
+        (TradingMode.FUTURES, MarginMode.ISOLATED),
     ]
 
-    def get_tickers(self, symbols: Optional[List[str]] = None, cached: bool = False) -> Tickers:
+    def get_tickers(
+        self, symbols: Optional[List[str]] = None, cached: bool = False
+    ) -> Tickers:
         tickers = super().get_tickers(symbols=symbols, cached=cached)
         if self.trading_mode == TradingMode.FUTURES:
             # Binance's future result has no bid/ask values.
@@ -74,6 +76,8 @@ class Binance(Exchange):
                 position_side = self._api.fapiPrivateGetPositionSideDual()
                 self._log_exchange_response("position_side_setting", position_side)
                 assets_margin = self._api.fapiPrivateGetMultiAssetsMargin()
+                # logger.info(f"What's inside _api: {self._api.__dict__}")
+                # logger.info(f"This is asset_margin: {assets_margin}.")
                 self._log_exchange_response("multi_asset_margin", assets_margin)
                 msg = ""
                 if position_side.get("dualSidePosition") is True:
@@ -82,10 +86,11 @@ class Binance(Exchange):
                         "Please change 'Position Mode' on your binance futures account."
                     )
                 if assets_margin.get("multiAssetsMargin") is True:
-                    msg += (
-                        "\nMulti-Asset Mode is not supported by freqtrade. "
-                        "Please change 'Asset Mode' on your binance futures account."
-                    )
+                    pass
+                    # msg += (
+                    #     "\nMulti-Asset Mode is not supported by freqtrade. "
+                    #     "Please change 'Asset Mode' on your binance futures account."
+                    # )
                 if msg:
                     raise OperationalException(msg)
         except ccxt.DDoSProtection as e:
@@ -183,11 +188,15 @@ class Binance(Exchange):
         """
 
         side_1 = -1 if is_short else 1
-        cross_vars = upnl_ex_1 - mm_ex_1 if self.margin_mode == MarginMode.CROSS else 0.0
+        cross_vars = (
+            upnl_ex_1 - mm_ex_1 if self.margin_mode == MarginMode.CROSS else 0.0
+        )
 
         # mm_ratio: Binance's formula specifies maintenance margin rate which is mm_ratio * 100%
         # maintenance_amt: (CUM) Maintenance Amount of position
-        mm_ratio, maintenance_amt = self.get_maintenance_ratio_and_amt(pair, stake_amount)
+        mm_ratio, maintenance_amt = self.get_maintenance_ratio_and_amt(
+            pair, stake_amount
+        )
 
         if maintenance_amt is None:
             raise OperationalException(
@@ -197,7 +206,8 @@ class Binance(Exchange):
 
         if self.trading_mode == TradingMode.FUTURES:
             return (
-                (wallet_balance + cross_vars + maintenance_amt) - (side_1 * amount * open_rate)
+                (wallet_balance + cross_vars + maintenance_amt)
+                - (side_1 * amount * open_rate)
             ) / ((amount * mm_ratio) - (side_1 * amount))
         else:
             raise OperationalException(
@@ -207,7 +217,9 @@ class Binance(Exchange):
     def load_leverage_tiers(self) -> Dict[str, List[Dict]]:
         if self.trading_mode == TradingMode.FUTURES:
             if self._config["dry_run"]:
-                leverage_tiers_path = Path(__file__).parent / "binance_leverage_tiers.json"
+                leverage_tiers_path = (
+                    Path(__file__).parent / "binance_leverage_tiers.json"
+                )
                 with leverage_tiers_path.open() as json_file:
                     return json_load(json_file)
             else:
